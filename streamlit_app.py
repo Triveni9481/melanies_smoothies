@@ -17,7 +17,7 @@ st.write(
     name_on_order
 )
 
-# Get active Snowflake session
+# Connect to Snowflake
 cnx = st.connection("snowflake")
 session = cnx.session()
 
@@ -26,12 +26,16 @@ my_dataframe = session.table(
     "SMOOTHIES.PUBLIC.FRUIT_OPTIONS"
 ).select(
     col("FRUIT_NAME")
-)
+).collect()
+
+# Convert Snowflake rows into a list of fruit names
+fruit_options = [row["FRUIT_NAME"] for row in my_dataframe]
 
 # Choose ingredients
 ingredients_list = st.multiselect(
     "Choose up to 5 ingredients:",
-    my_dataframe
+    fruit_options,
+    max_selections=5
 )
 
 if ingredients_list:
@@ -45,20 +49,22 @@ if ingredients_list:
 
     st.write(ingredients_string)
 
-    # Insert order
-    my_insert_stmt = """
-        INSERT INTO SMOOTHIES.PUBLIC.ORDERS
-        (INGREDIENTS, NAME_ON_ORDER)
-        VALUES ('""" + ingredients_string + """','""" + name_on_order + """')
-    """
-
-    st.write(my_insert_stmt)
-
     # Submit button
     time_to_insert = st.button("Submit Order")
 
     if time_to_insert:
-        session.sql(my_insert_stmt).collect()
+
+        # Safely insert the order
+        my_insert_stmt = """
+            INSERT INTO SMOOTHIES.PUBLIC.ORDERS
+            (INGREDIENTS, NAME_ON_ORDER)
+            VALUES (?, ?)
+        """
+
+        session.sql(
+            my_insert_stmt,
+            params=[ingredients_string, name_on_order]
+        ).collect()
 
         st.success(
             "Your Smoothie is ordered!",
